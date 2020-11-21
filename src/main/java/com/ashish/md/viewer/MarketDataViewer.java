@@ -29,12 +29,18 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 
+import javax.jms.Message;
+import javax.jms.TextMessage;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class MarketDataViewer extends Application {
+
+    public static void main(String[] args) {
+        launch(args);
+    }
 
     @Override
     public void start(Stage primaryStage) throws Exception {
@@ -54,6 +60,7 @@ public class MarketDataViewer extends Application {
         Stage quoteStage = new Stage();
         viewQuotes(quoteStage);
     }
+
     // market price setup
     private void viewMarketPrice(Stage stage) {
         stage.setX(600);
@@ -72,7 +79,7 @@ public class MarketDataViewer extends Application {
         stage.setScene(marketPriceScene);
 
         MarketPriceContainer pricesContainer = new MarketPriceContainer();
-        MarketPriceUpdater priceUpdater = new MarketPriceUpdater(pricesContainer);
+        MarketPriceUpdater priceUpdater = new MarketPriceUpdater(pricesContainer, true);
         AnimationTimer renderMarketPrice = getAnimationTimerForMarketPrice(stage, cryptoLabels, pricesContainer);
         addWindowResizeListener(stage, background);
         renderMarketPrice.start();
@@ -149,18 +156,24 @@ public class MarketDataViewer extends Application {
             this.marketPrice = marketPrice;
         }
     }
+
     public static class MarketPriceUpdater extends Thread {
         private MarketPriceContainer pricesContainer;
         private KafkaConsumer<String, String> kafkaConsumer;
         private EMSBroker emsBroker;
+        private boolean kafka;
 
-        public MarketPriceUpdater(MarketPriceContainer pricesContainer) {
+        public MarketPriceUpdater(MarketPriceContainer pricesContainer, boolean kafka) {
             this.pricesContainer = pricesContainer;
+            this.kafka = kafka;
             try {
-                this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
-                this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.marketprice"));
-               /* emsBroker = new EMSBroker(null, null, null);
-                emsBroker.createConsumer("topic", true);*/
+                if (!kafka) {
+                    emsBroker = new EMSBroker("ashish-VirtualBox:7222", null, null);
+                    emsBroker.createConsumer("exsim.nse.marketprice", true);
+                } else {
+                    this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
+                    this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.marketprice"));
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -172,16 +185,29 @@ public class MarketDataViewer extends Application {
             while (true) {
                 pricesContainer.getLockObject().lock();
                 try {
-                    ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
-                    for (ConsumerRecord<String, String> record : records) {
-                        String symbol = record.key();
-                        String data = record.value();
-                        byte[] decoded = Base64.getDecoder().decode(data);
-                        {
+                    if (!kafka) {
+                        Message msg = emsBroker.consumer().receive();
+                        if (msg == null)
+                            return;
+                        if (msg instanceof TextMessage) {
+                            TextMessage message = (TextMessage) msg;
+                            byte[] decoded = Base64.getDecoder().decode(message.getText());
                             MarketPrice marketPrice = deSerealizeAvroHttpRequestJSON(decoded);
                             pricesContainer.setMarketPrice(marketPrice);
                         }
+                    } else {
+                        ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
+                        for (ConsumerRecord<String, String> record : records) {
+                            String symbol = record.key();
+                            String data = record.value();
+                            byte[] decoded = Base64.getDecoder().decode(data);
+                            {
+                                MarketPrice marketPrice = deSerealizeAvroHttpRequestJSON(decoded);
+                                pricesContainer.setMarketPrice(marketPrice);
+                            }
+                        }
                     }
+
                 } catch (Exception e) {
                     e.printStackTrace();
                 } finally {
@@ -207,6 +233,7 @@ public class MarketDataViewer extends Application {
             return null;
         }
     }
+
     private Map<String, Label> createCryptoPriceLabels() {
         Label symbol = new Label("0");
         symbol.setId("Symbol");
@@ -301,7 +328,7 @@ public class MarketDataViewer extends Application {
         primaryStage.setWidth(500);
         primaryStage.setScene(marketDepthScene);
         MarketDepthContainer depthContainer = new MarketDepthContainer();
-        MarketByPriceUpdater marketByPriceUpdater = new MarketByPriceUpdater(depthContainer);
+        MarketByPriceUpdater marketByPriceUpdater = new MarketByPriceUpdater(depthContainer, true);
 
         AnimationTimer renderMarketDepth = getAnimationTimerForMarketByPrice(primaryStage, tableView, depthContainer);
         renderMarketDepth.start();
@@ -328,17 +355,17 @@ public class MarketDataViewer extends Application {
                                 List<BidDepth> bidDepths = marketByPrice.getBidList();
                                 List<AskDepth> askDepths = marketByPrice.getAskList();
                                 String symbol = String.valueOf(marketByPrice.getSymbol());
-                                primaryStage.setTitle("Market Depth for "+symbol);
+                                primaryStage.setTitle("Market Depth for " + symbol);
                                 if (bidDepths.size() > 4 && askDepths.size() > 4) {
-                                    tableView.getItems().set(0,new DepthData(bidDepths.get(0).getBidPrice(), bidDepths.get(0).getBidSize(), 5,
+                                    tableView.getItems().set(0, new DepthData(bidDepths.get(0).getBidPrice(), bidDepths.get(0).getBidSize(), 5,
                                             askDepths.get(0).getAskPrice(), askDepths.get(0).getAskSize(), 3));
-                                    tableView.getItems().set(1,new DepthData(bidDepths.get(1).getBidPrice(), bidDepths.get(1).getBidSize(), 5,
+                                    tableView.getItems().set(1, new DepthData(bidDepths.get(1).getBidPrice(), bidDepths.get(1).getBidSize(), 5,
                                             askDepths.get(1).getAskPrice(), askDepths.get(1).getAskSize(), 3));
-                                    tableView.getItems().set(2,new DepthData(bidDepths.get(2).getBidPrice(), bidDepths.get(2).getBidSize(), 5,
+                                    tableView.getItems().set(2, new DepthData(bidDepths.get(2).getBidPrice(), bidDepths.get(2).getBidSize(), 5,
                                             askDepths.get(2).getAskPrice(), askDepths.get(2).getAskSize(), 3));
-                                    tableView.getItems().set(3,new DepthData(bidDepths.get(3).getBidPrice(), bidDepths.get(3).getBidSize(), 5,
+                                    tableView.getItems().set(3, new DepthData(bidDepths.get(3).getBidPrice(), bidDepths.get(3).getBidSize(), 5,
                                             askDepths.get(3).getAskPrice(), askDepths.get(3).getAskSize(), 3));
-                                    tableView.getItems().set(4,new DepthData(bidDepths.get(4).getBidPrice(), bidDepths.get(4).getBidSize(), 5,
+                                    tableView.getItems().set(4, new DepthData(bidDepths.get(4).getBidPrice(), bidDepths.get(4).getBidSize(), 5,
                                             askDepths.get(4).getAskPrice(), askDepths.get(4).getAskSize(), 3));
                                 }
                             }
@@ -452,15 +479,24 @@ public class MarketDataViewer extends Application {
             this.marketByPrice = marketByPrice;
         }
     }
+
     public static class MarketByPriceUpdater extends Thread {
         private MarketDepthContainer marketDepthContainer;
         private KafkaConsumer<String, String> kafkaConsumer;
+        private EMSBroker emsBroker;
+        private boolean kafka;
 
-        public MarketByPriceUpdater(MarketDepthContainer marketDepthContainer) {
+        public MarketByPriceUpdater(MarketDepthContainer marketDepthContainer, boolean kafka) {
             this.marketDepthContainer = marketDepthContainer;
+            this.kafka = kafka;
             try {
-                this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
-                this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.marketbyprice"));
+                if (!kafka) {
+                    emsBroker = new EMSBroker("ashish-VirtualBox:7222", null, null);
+                    emsBroker.createConsumer("exsim.nse.marketbyprice", true);
+                } else {
+                    this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
+                    this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.marketbyprice"));
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -471,16 +507,29 @@ public class MarketDataViewer extends Application {
             while (true) {
                 marketDepthContainer.getLockObject().lock();
                 try {
-                    ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
-                    for (ConsumerRecord<String, String> record : records) {
-                        String symbol = record.key();
-                        String data = record.value();
-                        byte[] decoded = Base64.getDecoder().decode(data);
-                        {
+                    if (!kafka) {
+                        Message msg = emsBroker.consumer().receive();
+                        if (msg == null)
+                            return;
+                        if (msg instanceof TextMessage) {
+                            TextMessage message = (TextMessage) msg;
+                            byte[] decoded = Base64.getDecoder().decode(message.getText());
                             MarketByPrice marketByPrice = deSerealizeAvroHttpRequestJSON(decoded);
                             marketDepthContainer.setMarketByPrice(marketByPrice);
                         }
+                    } else {
+                        ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
+                        for (ConsumerRecord<String, String> record : records) {
+                            String symbol = record.key();
+                            String data = record.value();
+                            byte[] decoded = Base64.getDecoder().decode(data);
+                            {
+                                MarketByPrice marketByPrice = deSerealizeAvroHttpRequestJSON(decoded);
+                                marketDepthContainer.setMarketByPrice(marketByPrice);
+                            }
+                        }
                     }
+
                 } catch (Exception e) {
                     e.printStackTrace();
                 } finally {
@@ -537,7 +586,6 @@ public class MarketDataViewer extends Application {
         return tableView;
     }
 
-
     // Quote setup
 
     private void viewQuotes(Stage quoteStage) {
@@ -551,7 +599,7 @@ public class MarketDataViewer extends Application {
         quoteStage.setScene(tradeStageScene);
 
         MarketQuoteContainer quoteContainer = new MarketQuoteContainer();
-        MarketQuoteUpdater quoteUpdater = new MarketQuoteUpdater(quoteContainer);
+        MarketQuoteUpdater quoteUpdater = new MarketQuoteUpdater(quoteContainer, true);
 
         AnimationTimer renderMarketDepth = getAnimationTimerForQuote(quoteStage, tableView, quoteContainer);
         renderMarketDepth.start();
@@ -568,7 +616,7 @@ public class MarketDataViewer extends Application {
                         quoteStage.setTitle("Quote for " + String.valueOf(quoteContainer.getQuote().getSymbol()));
                         Quote quote = quoteContainer.getQuote();
                         Quote lastQuote = quoteContainer.getLastQuote();
-                        if(quote!=null && quote.getExchange()!=null && !lastQuote.equals(quote)) { // temporary workaround, has to be fixed at data side
+                        if (quote != null && quote.getExchange() != null && !lastQuote.equals(quote)) { // temporary workaround, has to be fixed at data side
                             tableView.getItems().add(new QuoteView(String.valueOf(quote.getTime()), String.valueOf(quote.getBidprice()),
                                     String.valueOf(quote.getBidsize()), String.valueOf(quote.getAsksize()), String.valueOf(quote.getAskprice()),
                                     String.valueOf(quote.getExchange()), String.valueOf(quote.getSymbol())));
@@ -583,14 +631,14 @@ public class MarketDataViewer extends Application {
         return animationTimer;
     }
 
-    public static class QuoteView{
-        private  String quoteTime;
-        private  String bidprice;
-        private  String bidsize;
-        private  String asksize;
-        private  String askprice;
-        private  String exchange;
-        private  String symbol;
+    public static class QuoteView {
+        private String quoteTime;
+        private String bidprice;
+        private String bidsize;
+        private String asksize;
+        private String askprice;
+        private String exchange;
+        private String symbol;
 
         public QuoteView(String quoteTime, String bidprice, String bidsize, String asksize, String askprice, String exchange, String symbol) {
             this.quoteTime = quoteTime;
@@ -693,6 +741,7 @@ public class MarketDataViewer extends Application {
 
         return tableView;
     }
+
     public static class MarketQuoteContainer {
         private Lock lockObject = new ReentrantLock();
         private Quote quote;
@@ -723,15 +772,24 @@ public class MarketDataViewer extends Application {
             this.lastQuote = lastQuote;
         }
     }
+
     public static class MarketQuoteUpdater extends Thread {
         private MarketQuoteContainer quoteContainer;
         private KafkaConsumer<String, String> kafkaConsumer;
+        private EMSBroker emsBroker;
+        private boolean kafka;
 
-        public MarketQuoteUpdater(MarketQuoteContainer quoteContainer) {
+        public MarketQuoteUpdater(MarketQuoteContainer quoteContainer, boolean kafka) {
             this.quoteContainer = quoteContainer;
+            this.kafka = kafka;
             try {
-                this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
-                this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.quotes"));
+                if (!kafka) {
+                    emsBroker = new EMSBroker("ashish-VirtualBox:7222", null, null);
+                    emsBroker.createConsumer("exsim.nse.quotes", true);
+                } else {
+                    this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
+                    this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.quotes"));
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -742,14 +800,26 @@ public class MarketDataViewer extends Application {
             while (true) {
                 quoteContainer.getLockObject().lock();
                 try {
-                    ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
-                    for (ConsumerRecord<String, String> record : records) {
-                        String symbol = record.key();
-                        String data = record.value();
-                        byte[] decoded = Base64.getDecoder().decode(data);
-                        {
+                    if (!kafka) {
+                        Message msg = emsBroker.consumer().receive();
+                        if (msg == null)
+                            return;
+                        if (msg instanceof TextMessage) {
+                            TextMessage message = (TextMessage) msg;
+                            byte[] decoded = Base64.getDecoder().decode(message.getText());
                             Quote quote = deSerealizeAvroHttpRequestJSON(decoded);
                             quoteContainer.setQuote(quote);
+                        }
+                    } else {
+                        ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
+                        for (ConsumerRecord<String, String> record : records) {
+                            String symbol = record.key();
+                            String data = record.value();
+                            byte[] decoded = Base64.getDecoder().decode(data);
+                            {
+                                Quote quote = deSerealizeAvroHttpRequestJSON(decoded);
+                                quoteContainer.setQuote(quote);
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -790,7 +860,7 @@ public class MarketDataViewer extends Application {
         tradeStage.setScene(tradeStageScene);
 
         MarketTradeContainer tradeContainer = new MarketTradeContainer();
-        MarketTradeUpdater tradeUpdater = new MarketTradeUpdater(tradeContainer);
+        MarketTradeUpdater tradeUpdater = new MarketTradeUpdater(tradeContainer, true);
 
         AnimationTimer renderMarketDepth = getAnimationTimerForTrade(tradeStage, tableView, tradeContainer);
 
@@ -808,7 +878,7 @@ public class MarketDataViewer extends Application {
                         tradeStage.setTitle("Trade for " + String.valueOf(tradeContainer.getTrade().getSymbol()));
                         Trade trade = tradeContainer.getTrade();
                         Trade lastTrade = tradeContainer.getLastTrade();
-                        if(trade!=null && trade.getExchange()!=null && !trade.equals(lastTrade)) { // temporary workaround, has to be fixed at data side
+                        if (trade != null && trade.getExchange() != null && !trade.equals(lastTrade)) { // temporary workaround, has to be fixed at data side
                             tableView.getItems().add(new TradeView(String.valueOf(trade.getTime()), String.valueOf(trade.getSize()), String.valueOf(trade.getPrice()), String.valueOf(trade.getSymbol()), String.valueOf(trade.getExchange())));
                             tradeContainer.setLastTrade(trade);
                         }
@@ -822,7 +892,7 @@ public class MarketDataViewer extends Application {
         return animationTimer;
     }
 
-    public static class TradeView{
+    public static class TradeView {
         private String tradeTime;
         private String tradeQty;
         private String tradePrice;
@@ -938,12 +1008,20 @@ public class MarketDataViewer extends Application {
     public static class MarketTradeUpdater extends Thread {
         private MarketTradeContainer tradeContainer;
         private KafkaConsumer<String, String> kafkaConsumer;
+        private EMSBroker emsBroker;
+        private boolean kafka;
 
-        public MarketTradeUpdater(MarketTradeContainer tradeContainer) {
+        public MarketTradeUpdater(MarketTradeContainer tradeContainer, boolean kafka) {
             this.tradeContainer = tradeContainer;
+            this.kafka = kafka;
             try {
-                this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
-                this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.trades"));
+                if (!kafka) {
+                    emsBroker = new EMSBroker("ashish-VirtualBox:7222", null, null);
+                    emsBroker.createConsumer("exsim.nse.trades", true);
+                } else {
+                    this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
+                    this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.trades"));
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -954,14 +1032,26 @@ public class MarketDataViewer extends Application {
             while (true) {
                 tradeContainer.getLockObject().lock();
                 try {
-                    ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
-                    for (ConsumerRecord<String, String> record : records) {
-                        String symbol = record.key();
-                        String data = record.value();
-                        byte[] decoded = Base64.getDecoder().decode(data);
-                        {
+                    if (!kafka) {
+                        Message msg = emsBroker.consumer().receive();
+                        if (msg == null)
+                            return;
+                        if (msg instanceof TextMessage) {
+                            TextMessage message = (TextMessage) msg;
+                            byte[] decoded = Base64.getDecoder().decode(message.getText());
                             Trade trade = deSerealizeAvroHttpRequestJSON(decoded);
                             tradeContainer.setTrade(trade);
+                        }
+                    } else {
+                        ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
+                        for (ConsumerRecord<String, String> record : records) {
+                            String symbol = record.key();
+                            String data = record.value();
+                            byte[] decoded = Base64.getDecoder().decode(data);
+                            {
+                                Trade trade = deSerealizeAvroHttpRequestJSON(decoded);
+                                tradeContainer.setTrade(trade);
+                            }
                         }
                     }
                 } catch (Exception e) {
