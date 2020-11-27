@@ -59,6 +59,10 @@ public class MarketDataViewer extends Application {
         // Quote stage
         Stage quoteStage = new Stage();
         viewQuotes(quoteStage);
+
+        // Execution stage
+      /*  Stage executionStage = new Stage();
+        viewExecutions(executionStage);*/
     }
 
     // market price setup
@@ -350,26 +354,36 @@ public class MarketDataViewer extends Application {
                             tableView.getItems().add(new DepthData(0, 0, 0, 0, 0, 0));
                             tableView.getItems().add(new DepthData(0, 0, 0, 0, 0, 0));
                             tableView.getItems().add(new DepthData(0, 0, 0, 0, 0, 0));
+
                         } else {
                             if (marketByPrice.getBidList() != null && !marketByPrice.getBidList().isEmpty()) {
                                 List<BidDepth> bidDepths = marketByPrice.getBidList();
                                 List<AskDepth> askDepths = marketByPrice.getAskList();
                                 String symbol = String.valueOf(marketByPrice.getSymbol());
                                 primaryStage.setTitle("Market Depth for " + symbol);
-                                if (bidDepths.size() > 4 && askDepths.size() > 4) {
-                                    tableView.getItems().set(0, new DepthData(bidDepths.get(0).getBidPrice(), bidDepths.get(0).getBidSize(), 5,
-                                            askDepths.get(0).getAskPrice(), askDepths.get(0).getAskSize(), 3));
-                                    tableView.getItems().set(1, new DepthData(bidDepths.get(1).getBidPrice(), bidDepths.get(1).getBidSize(), 5,
-                                            askDepths.get(1).getAskPrice(), askDepths.get(1).getAskSize(), 3));
-                                    tableView.getItems().set(2, new DepthData(bidDepths.get(2).getBidPrice(), bidDepths.get(2).getBidSize(), 5,
-                                            askDepths.get(2).getAskPrice(), askDepths.get(2).getAskSize(), 3));
-                                    tableView.getItems().set(3, new DepthData(bidDepths.get(3).getBidPrice(), bidDepths.get(3).getBidSize(), 5,
-                                            askDepths.get(3).getAskPrice(), askDepths.get(3).getAskSize(), 3));
-                                    tableView.getItems().set(4, new DepthData(bidDepths.get(4).getBidPrice(), bidDepths.get(4).getBidSize(), 5,
-                                            askDepths.get(4).getAskPrice(), askDepths.get(4).getAskSize(), 3));
+
+                                int topSize = bidDepths.size() > askDepths.size() ? bidDepths.size() : ((bidDepths.size() < askDepths.size()) ? askDepths.size() : bidDepths.size());
+                                if (bidDepths.size() > 0 && bidDepths.size() < 6) {
+                                    for (int i = 0; i < bidDepths.size(); i++) {
+                                        BidDepth bidDepth = bidDepths.get(i);
+                                        DepthData data = (DepthData) tableView.getItems().get(i);
+                                        data.setBid(bidDepth.getBidPrice());
+                                        data.setBidQty(bidDepth.getBidSize());
+                                        data.setBidOrders(4);
+                                    }
+                                }
+                                if (askDepths.size() > 0 && askDepths.size() < 6) {
+                                    for (int i = 0; i < askDepths.size(); i++) {
+                                        AskDepth askDepth = askDepths.get(i);
+                                        DepthData data = (DepthData) tableView.getItems().get(i);
+                                        data.setAsk(askDepth.getAskPrice());
+                                        data.setAskQty(askDepth.getAskSize());
+                                        data.setAskOrders(4);
+                                    }
                                 }
                             }
                         }
+                        tableView.refresh();
                     } catch (Exception e) {
                         e.printStackTrace();
                     } finally {
@@ -595,7 +609,7 @@ public class MarketDataViewer extends Application {
         quoteStage.setX(600);
         quoteStage.setY(500);
         quoteStage.setHeight(400);
-        quoteStage.setWidth(500);
+        quoteStage.setWidth(580);
         quoteStage.setScene(tradeStageScene);
 
         MarketQuoteContainer quoteContainer = new MarketQuoteContainer();
@@ -1080,6 +1094,56 @@ public class MarketDataViewer extends Application {
         }
     }
 
+    // execution started
+
+    private void viewExecutions(Stage executionStage) {
+        TableView tableView = getExecutionTableView();
+        VBox vbox = new VBox(tableView);
+        Scene executionStageScene = new Scene(vbox);
+        executionStage.setX(100);
+        executionStage.setY(500);
+        executionStage.setHeight(400);
+        executionStage.setWidth(500);
+        executionStage.setScene(executionStageScene);
+
+        MarketTradeContainer tradeContainer = new MarketTradeContainer();
+        MarketTradeUpdater tradeUpdater = new MarketTradeUpdater(tradeContainer, true);
+
+        AnimationTimer renderMarketDepth = getAnimationTimerForTrade(executionStage, tableView, tradeContainer);
+
+        renderMarketDepth.start();
+        tradeUpdater.start();
+        executionStage.show();
+    }
+
+
+    private TableView getExecutionTableView() {
+        TableView tableView = new TableView();
+
+        TableColumn<DepthData, String> column1 = new TableColumn<>("Time");
+        column1.setCellValueFactory(new PropertyValueFactory<>("tradeTime"));
+
+        TableColumn<DepthData, String> column2 = new TableColumn<>("Quantity");
+        column2.setCellValueFactory(new PropertyValueFactory<>("tradeQty"));
+
+        TableColumn<DepthData, String> column3 = new TableColumn<>("Price");
+        column3.setCellValueFactory(new PropertyValueFactory<>("tradePrice"));
+
+        TableColumn<DepthData, String> column4 = new TableColumn<>("Symbol");
+        column4.setCellValueFactory(new PropertyValueFactory<>("symbol"));
+
+        TableColumn<DepthData, String> column5 = new TableColumn<>("Exchange");
+        column5.setCellValueFactory(new PropertyValueFactory<>("exchange"));
+
+        tableView.getColumns().add(column1);
+        tableView.getColumns().add(column2);
+        tableView.getColumns().add(column3);
+        tableView.getColumns().add(column4);
+        tableView.getColumns().add(column5);
+        return tableView;
+    }
+
+
     private void addWindowResizeListener(Stage stage, Rectangle background) {
         ChangeListener<Number> stageSizeListener = ((observable, oldValue, newValue) -> {
             background.setHeight(stage.getHeight());
@@ -1088,5 +1152,6 @@ public class MarketDataViewer extends Application {
         stage.widthProperty().addListener(stageSizeListener);
         stage.heightProperty().addListener(stageSizeListener);
     }
+
 
 }
