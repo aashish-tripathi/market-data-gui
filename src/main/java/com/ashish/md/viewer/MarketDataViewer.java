@@ -61,8 +61,8 @@ public class MarketDataViewer extends Application {
         viewQuotes(quoteStage);
 
         // Execution stage
-      /*  Stage executionStage = new Stage();
-        viewExecutions(executionStage);*/
+        Stage executionStage = new Stage();
+        viewExecutions(executionStage);
     }
 
     // market price setup
@@ -369,7 +369,7 @@ public class MarketDataViewer extends Application {
                                         DepthData data = (DepthData) tableView.getItems().get(i);
                                         data.setBid(bidDepth.getBidPrice());
                                         data.setBidQty(bidDepth.getBidSize());
-                                        data.setBidOrders(4);
+                                        data.setBidOrders(bidDepth.getBidOrders());
                                     }
                                 }
                                 if (askDepths.size() > 0 && askDepths.size() < 6) {
@@ -378,7 +378,7 @@ public class MarketDataViewer extends Application {
                                         DepthData data = (DepthData) tableView.getItems().get(i);
                                         data.setAsk(askDepth.getAskPrice());
                                         data.setAskQty(askDepth.getAskSize());
-                                        data.setAskOrders(4);
+                                        data.setAskOrders(askDepth.getAskOrders());
                                     }
                                 }
                             }
@@ -398,12 +398,12 @@ public class MarketDataViewer extends Application {
     public static class DepthData {
         private double bid;
         private long bidQty;
-        private int bidOrders;
+        private long bidOrders;
         private double ask;
         private long askQty;
-        private int askOrders;
+        private long askOrders;
 
-        public DepthData(double bid, long bidQty, int bidOrders, double ask, long askQty, int askOrders) {
+        public DepthData(double bid, long bidQty, long bidOrders, double ask, long askQty, long askOrders) {
             this.bid = bid;
             this.bidQty = bidQty;
             this.bidOrders = bidOrders;
@@ -428,11 +428,11 @@ public class MarketDataViewer extends Application {
             this.bidQty = bidQty;
         }
 
-        public int getBidOrders() {
+        public long getBidOrders() {
             return bidOrders;
         }
 
-        public void setBidOrders(int bidOrders) {
+        public void setBidOrders(long bidOrders) {
             this.bidOrders = bidOrders;
         }
 
@@ -452,11 +452,11 @@ public class MarketDataViewer extends Application {
             this.askQty = askQty;
         }
 
-        public int getAskOrders() {
+        public long getAskOrders() {
             return askOrders;
         }
 
-        public void setAskOrders(int askOrders) {
+        public void setAskOrders(long askOrders) {
             this.askOrders = askOrders;
         }
 
@@ -537,10 +537,9 @@ public class MarketDataViewer extends Application {
                             String symbol = record.key();
                             String data = record.value();
                             byte[] decoded = Base64.getDecoder().decode(data);
-                            {
-                                MarketByPrice marketByPrice = deSerealizeAvroHttpRequestJSON(decoded);
-                                marketDepthContainer.setMarketByPrice(marketByPrice);
-                            }
+                            MarketByPrice marketByPrice = deSerealizeAvroHttpRequestJSON(decoded);
+                            marketDepthContainer.setMarketByPrice(marketByPrice);
+
                         }
                     }
 
@@ -739,11 +738,11 @@ public class MarketDataViewer extends Application {
         TableColumn<DepthData, String> column5 = new TableColumn<>("Askprice");
         column5.setCellValueFactory(new PropertyValueFactory<>("askprice"));
 
-        TableColumn<DepthData, String> column6 = new TableColumn<>("Exchange");
-        column6.setCellValueFactory(new PropertyValueFactory<>("exchange"));
+        TableColumn<DepthData, String> column6 = new TableColumn<>("Symbol");
+        column6.setCellValueFactory(new PropertyValueFactory<>("symbol"));
 
-        TableColumn<DepthData, String> column7 = new TableColumn<>("Symbol");
-        column7.setCellValueFactory(new PropertyValueFactory<>("symbol"));
+        TableColumn<DepthData, String> column7 = new TableColumn<>("Exchange");
+        column7.setCellValueFactory(new PropertyValueFactory<>("exchange"));
 
         tableView.getColumns().add(column1);
         tableView.getColumns().add(column2);
@@ -1100,49 +1099,361 @@ public class MarketDataViewer extends Application {
         TableView tableView = getExecutionTableView();
         VBox vbox = new VBox(tableView);
         Scene executionStageScene = new Scene(vbox);
-        executionStage.setX(100);
-        executionStage.setY(500);
+        executionStage.setX(950);
+        executionStage.setY(100);
         executionStage.setHeight(400);
-        executionStage.setWidth(500);
+        executionStage.setWidth(950);
         executionStage.setScene(executionStageScene);
 
-        MarketTradeContainer tradeContainer = new MarketTradeContainer();
-        MarketTradeUpdater tradeUpdater = new MarketTradeUpdater(tradeContainer, true);
+        OrderExecutionsContainer orderExecutionsContainer = new OrderExecutionsContainer();
+        OrderExecutionsUpdater orderExecutionsUpdater = new OrderExecutionsUpdater(orderExecutionsContainer, true);
 
-        AnimationTimer renderMarketDepth = getAnimationTimerForTrade(executionStage, tableView, tradeContainer);
+        AnimationTimer renderMarketDepth = getAnimationTimerForOrderExecution(executionStage, tableView, orderExecutionsContainer);
 
         renderMarketDepth.start();
-        tradeUpdater.start();
+        orderExecutionsUpdater.start();
         executionStage.show();
     }
+    public static class OrderExecutionView {
+        private String orderId;
+        private String clientId;
+        private String clientName;
+        private String ordertime;
+        private String side;
+        private String brokerId;
+        private String quantity;
+        private String orderStatus;
+        private String filledQuantity;
+        private String remainingQuantity;
+        private String limitPrice;
+        private String symbol;
+        private String exchange;
 
+        public OrderExecutionView() {
+        }
+
+        public OrderExecutionView(String orderId, String clientId, String clientName, String ordertime, String side, String brokerId, String quantity, String orderStatus, String filledQuantity, String remainingQuantity, String limitPrice, String symbol, String exchange) {
+            this.orderId = orderId;
+            this.clientId = clientId;
+            this.clientName = clientName;
+            this.ordertime = ordertime;
+            this.side = side;
+            this.brokerId = brokerId;
+            this.quantity = quantity;
+            this.orderStatus = orderStatus;
+            this.filledQuantity = filledQuantity;
+            this.remainingQuantity = remainingQuantity;
+            this.limitPrice = limitPrice;
+            this.symbol = symbol;
+            this.exchange = exchange;
+        }
+
+        public String getOrderId() {
+            return orderId;
+        }
+
+        public void setOrderId(String orderId) {
+            this.orderId = orderId;
+        }
+
+        public String getClientId() {
+            return clientId;
+        }
+
+        public void setClientId(String clientId) {
+            this.clientId = clientId;
+        }
+
+        public String getClientName() {
+            return clientName;
+        }
+
+        public void setClientName(String clientName) {
+            this.clientName = clientName;
+        }
+
+        public String getOrdertime() {
+            return ordertime;
+        }
+
+        public void setOrdertime(String ordertime) {
+            this.ordertime = ordertime;
+        }
+
+        public String getSide() {
+            return side;
+        }
+
+        public void setSide(String side) {
+            this.side = side;
+        }
+
+        public String getBrokerId() {
+            return brokerId;
+        }
+
+        public void setBrokerId(String brokerId) {
+            this.brokerId = brokerId;
+        }
+
+        public String getQuantity() {
+            return quantity;
+        }
+
+        public void setQuantity(String quantity) {
+            this.quantity = quantity;
+        }
+
+        public String getOrderStatus() {
+            return orderStatus;
+        }
+
+        public void setOrderStatus(String orderStatus) {
+            this.orderStatus = orderStatus;
+        }
+
+        public String getFilledQuantity() {
+            return filledQuantity;
+        }
+
+        public void setFilledQuantity(String filledQuantity) {
+            this.filledQuantity = filledQuantity;
+        }
+
+        public String getRemainingQuantity() {
+            return remainingQuantity;
+        }
+
+        public void setRemainingQuantity(String remainingQuantity) {
+            this.remainingQuantity = remainingQuantity;
+        }
+
+        public String getLimitPrice() {
+            return limitPrice;
+        }
+
+        public void setLimitPrice(String limitPrice) {
+            this.limitPrice = limitPrice;
+        }
+
+        public String getSymbol() {
+            return symbol;
+        }
+
+        public void setSymbol(String symbol) {
+            this.symbol = symbol;
+        }
+
+        public String getExchange() {
+            return exchange;
+        }
+
+        public void setExchange(String exchange) {
+            this.exchange = exchange;
+        }
+    }
 
     private TableView getExecutionTableView() {
+
         TableView tableView = new TableView();
 
-        TableColumn<DepthData, String> column1 = new TableColumn<>("Time");
-        column1.setCellValueFactory(new PropertyValueFactory<>("tradeTime"));
+        TableColumn<DepthData, String> column1 = new TableColumn<>("OrderId");
+        column1.setCellValueFactory(new PropertyValueFactory<>("orderId"));
 
-        TableColumn<DepthData, String> column2 = new TableColumn<>("Quantity");
-        column2.setCellValueFactory(new PropertyValueFactory<>("tradeQty"));
+        TableColumn<DepthData, String> column2 = new TableColumn<>("ClientId");
+        column2.setCellValueFactory(new PropertyValueFactory<>("clientId"));
 
-        TableColumn<DepthData, String> column3 = new TableColumn<>("Price");
-        column3.setCellValueFactory(new PropertyValueFactory<>("tradePrice"));
+        TableColumn<DepthData, String> column3 = new TableColumn<>("ClientName");
+        column3.setCellValueFactory(new PropertyValueFactory<>("clientName"));
 
-        TableColumn<DepthData, String> column4 = new TableColumn<>("Symbol");
-        column4.setCellValueFactory(new PropertyValueFactory<>("symbol"));
+        TableColumn<DepthData, String> column4 = new TableColumn<>("Ordertime");
+        column4.setCellValueFactory(new PropertyValueFactory<>("ordertime"));
 
-        TableColumn<DepthData, String> column5 = new TableColumn<>("Exchange");
-        column5.setCellValueFactory(new PropertyValueFactory<>("exchange"));
+        TableColumn<DepthData, String> column5 = new TableColumn<>("Side");
+        column5.setCellValueFactory(new PropertyValueFactory<>("side"));
+
+        TableColumn<DepthData, String> column6 = new TableColumn<>("BrokerId");
+        column6.setCellValueFactory(new PropertyValueFactory<>("brokerId"));
+
+        TableColumn<DepthData, String> column7 = new TableColumn<>("Quantity");
+        column7.setCellValueFactory(new PropertyValueFactory<>("quantity"));
+
+        TableColumn<DepthData, String> column8 = new TableColumn<>("OrderStatus");
+        column8.setCellValueFactory(new PropertyValueFactory<>("orderStatus"));
+
+        TableColumn<DepthData, String> column9 = new TableColumn<>("FilledQuantity");
+        column9.setCellValueFactory(new PropertyValueFactory<>("filledQuantity"));
+
+        TableColumn<DepthData, String> column10 = new TableColumn<>("RemainingQuantity");
+        column10.setCellValueFactory(new PropertyValueFactory<>("remainingQuantity"));
+
+        TableColumn<DepthData, String> column11 = new TableColumn<>("LimitPrice");
+        column11.setCellValueFactory(new PropertyValueFactory<>("limitPrice"));
+
+        TableColumn<DepthData, String> column12 = new TableColumn<>("Symbol");
+        column12.setCellValueFactory(new PropertyValueFactory<>("symbol"));
+
+        TableColumn<DepthData, String> column13 = new TableColumn<>("Exchange");
+        column13.setCellValueFactory(new PropertyValueFactory<>("exchange"));
 
         tableView.getColumns().add(column1);
         tableView.getColumns().add(column2);
         tableView.getColumns().add(column3);
         tableView.getColumns().add(column4);
         tableView.getColumns().add(column5);
+        tableView.getColumns().add(column6);
+        tableView.getColumns().add(column7);
+        tableView.getColumns().add(column8);
+        tableView.getColumns().add(column9);
+        tableView.getColumns().add(column10);
+        tableView.getColumns().add(column11);
+        tableView.getColumns().add(column12);
+        tableView.getColumns().add(column13);
         return tableView;
     }
 
+    public static class OrderExecutionsContainer {
+        private Lock lockObject = new ReentrantLock();
+        private Order order;
+        private Order lastOrder;
+
+        public OrderExecutionsContainer() {
+            this.order = new Order();
+            this.lastOrder = order;
+        }
+
+        public Lock getLockObject() {
+            return lockObject;
+        }
+
+        public Order getOrder() {
+            return order;
+        }
+
+        public void setOrder(Order order) {
+            this.order = order;
+        }
+
+        public Order getLastOrder() {
+            return lastOrder;
+        }
+
+        public void setLastOrder(Order lastOrder) {
+            this.lastOrder = lastOrder;
+        }
+    }
+    public static class OrderExecutionsUpdater extends Thread {
+        private OrderExecutionsContainer orderExecutionsContainer;
+        private KafkaConsumer<String, String> kafkaConsumer;
+        private EMSBroker emsBroker;
+        private boolean kafka;
+
+        public OrderExecutionsUpdater(OrderExecutionsContainer tradeContainer, boolean kafka) {
+            this.orderExecutionsContainer = tradeContainer;
+            this.kafka = kafka;
+            try {
+                if (!kafka) {
+                    emsBroker = new EMSBroker("ashish-VirtualBox:7222", null, null);
+                    emsBroker.createConsumer("exsim.nse.executions", true);
+                } else {
+                    this.kafkaConsumer = new KafkaBroker("ashish-VirtualBox:9093,ashish-VirtualBox:9094,ashish-VirtualBox:9095").createConsumer(null);
+                    this.kafkaConsumer.subscribe(Arrays.asList("exsim.nse.executions"));
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void run() {
+            while (true) {
+                orderExecutionsContainer.getLockObject().lock();
+                try {
+                    if (!kafka) {
+                        Message msg = emsBroker.consumer().receive();
+                        if (msg == null)
+                            return;
+                        if (msg instanceof TextMessage) {
+                            TextMessage message = (TextMessage) msg;
+                            byte[] decoded = Base64.getDecoder().decode(message.getText());
+                            Order order = deSerealizeAvroHttpRequestJSON(decoded);
+                            orderExecutionsContainer.setOrder(order);
+                        }
+                    } else {
+                        ConsumerRecords<String, String> records = kafkaConsumer.poll(java.time.Duration.ofMillis(10));
+                        for (ConsumerRecord<String, String> record : records) {
+                            String symbol = record.key();
+                            String data = record.value();
+                            byte[] decoded = Base64.getDecoder().decode(data);
+                            {
+                                Order order = deSerealizeAvroHttpRequestJSON(decoded);
+                                orderExecutionsContainer.setOrder(order);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    orderExecutionsContainer.getLockObject().unlock();
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                }
+            }
+        }
+
+        public Order deSerealizeAvroHttpRequestJSON(byte[] data) {
+            DatumReader<Order> reader
+                    = new SpecificDatumReader<>(Order.class);
+            Decoder decoder = null;
+            try {
+                decoder = DecoderFactory.get().jsonDecoder(Order.getClassSchema(), new String(data));
+                return reader.read(null, decoder);
+            } catch (IOException e) {
+                //logger.error("Deserialization error:" + e.getMessage());
+            }
+            return null;
+        }
+    }
+
+    private AnimationTimer getAnimationTimerForOrderExecution(Stage executionStatge, TableView tableView, OrderExecutionsContainer orderExecutionsContainer) {
+        AnimationTimer animationTimer = new AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                if (orderExecutionsContainer.getLockObject().tryLock()) {
+                    try {
+                        executionStatge.setTitle("Orders for " + String.valueOf(orderExecutionsContainer.getOrder().getSymbol()));
+                        Order order = orderExecutionsContainer.getOrder();
+                        Order lastOrder = orderExecutionsContainer.getLastOrder();
+                        if (order != null && order.getExchange() != null && !order.equals(lastOrder)) {
+                            OrderExecutionView orderExecutionView = new OrderExecutionView();
+                            orderExecutionView.setOrderId(order.getOrderId().toString());
+                            orderExecutionView.setClientId(order.getClientId().toString());
+                            orderExecutionView.setOrderStatus(order.getOrderStatus().toString());
+                            orderExecutionView.setExchange(order.getExchange().toString());
+                            orderExecutionView.setOrdertime(order.getOrdertime().toString());
+                            orderExecutionView.setBrokerId(order.getBrokerId().toString());
+                            orderExecutionView.setClientName(order.getClientName().toString());
+                            orderExecutionView.setFilledQuantity(order.getFilledQuantity().toString());
+                            orderExecutionView.setQuantity(order.getQuantity().toString());
+                            orderExecutionView.setRemainingQuantity(order.getRemainingQuantity().toString());
+                            orderExecutionView.setLimitPrice(order.getLimitPrice().toString());
+                            orderExecutionView.setSide(order.getSide().toString());
+                            orderExecutionView.setSymbol(order.getSymbol().toString());
+                            orderExecutionView.setExchange(order.getExchange().toString());
+                            tableView.getItems().add(orderExecutionView);
+                            orderExecutionsContainer.setLastOrder(order);
+                        }
+
+                    } finally {
+                        orderExecutionsContainer.getLockObject().unlock();
+                    }
+                }
+            }
+        };
+        return animationTimer;
+    }
 
     private void addWindowResizeListener(Stage stage, Rectangle background) {
         ChangeListener<Number> stageSizeListener = ((observable, oldValue, newValue) -> {
