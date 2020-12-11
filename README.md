@@ -3,7 +3,7 @@
 ![Alt text](https://github.com/aashish-tripathi/market-data-gui/blob/main/MP_SC.JPG "Market Price")
 
 
-![Alt text](https://github.com/aashish-tripathi/market-data-gui/blob/main/MBP_SC.JPG "Market Depth")
+![Alt text](https://github.com/aashish-tripathi/market-data-gui/blob/main/MB_P.JPG "Market Depth")
 
 
 ![Alt text](https://github.com/aashish-tripathi/market-data-gui/blob/main/Executions.JPG "Order Executions")
